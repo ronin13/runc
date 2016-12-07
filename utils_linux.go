@@ -95,18 +95,16 @@ func newProcess(p specs.Process) (*libcontainer.Process, error) {
 }
 
 func dupStdio(process *libcontainer.Process, rootuid, rootgid int) error {
-	process.Stdin = os.Stdin
-	process.Stdout = os.Stdout
-	process.Stderr = os.Stderr
-	for _, fd := range []uintptr{
-		os.Stdin.Fd(),
-		os.Stdout.Fd(),
-		os.Stderr.Fd(),
-	} {
-		if err := syscall.Fchown(int(fd), rootuid, rootgid); err != nil {
-			return err
-		}
+
+	i, err := process.InitializeIO(rootuid, rootgid)
+	if err != nil {
+		return err
 	}
+
+	process.Stdin = i.Stdout
+	process.Stdout = i.Stdin
+	process.Stderr = i.Stdin
+
 	return nil
 }
 
