@@ -41,6 +41,13 @@ func needsSetupDev(config *configs.Config) bool {
 // because console setup happens inside the caller. You must call
 // finalizeRootfs in order to finish the rootfs setup.
 func prepareRootfs(pipe io.ReadWriter, config *configs.Config) (err error) {
+	mounted, err := cgroup2Mounted()
+	if err != nil {
+		return newSystemErrorWithCause(err, "error retrieving mountinfo")
+	}
+	if mounted {
+		return fmt.Errorf("cgroup v2 is not supported")
+	}
 	if err := prepareRoot(config); err != nil {
 		return newSystemErrorWithCause(err, "preparing rootfs")
 	}
@@ -426,7 +433,7 @@ func reOpenDevNull() error {
 	var stat, devNullStat syscall.Stat_t
 	file, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
 	if err != nil {
-		return fmt.Errorf("Failed to open /dev/null - %s", err)
+		return fmt.Errorf("failed to open /dev/null - %s", err)
 	}
 	defer file.Close()
 	if err := syscall.Fstat(int(file.Fd()), &devNullStat); err != nil {
@@ -519,6 +526,19 @@ func getMountInfo(mountinfo []*mount.Info, dir string) *mount.Info {
 	return nil
 }
 
+func cgroup2Mounted() (bool, error) {
+	mounts, err := mount.GetMounts()
+	if err != nil {
+		return false, err
+	}
+	for _, m := range mounts {
+		if m.Fstype == "cgroup2" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Get the parent mount point of directory passed in as argument. Also return
 // optional fields.
 func getParentMount(rootfs string) (string, string, error) {
@@ -549,7 +569,7 @@ func getParentMount(rootfs string) (string, string, error) {
 	}
 
 	// If we are here, we did not find parent mount. Something is wrong.
-	return "", "", fmt.Errorf("Could not find parent mount of %s", rootfs)
+	return "", "", fmt.Errorf("could not find parent mount of %s", rootfs)
 }
 
 // Make parent mount private if it was shared
